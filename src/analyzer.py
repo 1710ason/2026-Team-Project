@@ -24,11 +24,8 @@ class TransformerCoreAnalyzer:
         Returns:
             pandas DataFrame.
         """
-        # Load data, assuming headers exist. Skip header if necessary.
-        df = pd.read_csv(filepath)
-        # Rename columns to standard names for internal consistency if needed
-        # Expected: Time, Ch1_Voltage, Ch2_Voltage
-        return df
+        # TODO: Implement CSV loading
+        pass
 
     def analyze_waveform(self, time_col, ch1_volts, ch2_volts, frequency):
         """
@@ -45,41 +42,22 @@ class TransformerCoreAnalyzer:
         Returns:
             H_field, B_field, specific_loss
         """
+        # TODO: Implement the analysis pipeline calling Physics and DSP modules
+        pass
+
+    def perform_loss_separation(self, results, output_dir="output"):
+        """
+        Aggregates results and performs Two-Frequency Loss Separation.
         
-        # Step 1: H-Field calculation from Shunt Voltage
-        H = Magnetics.calculate_H_field(ch1_volts, self.config)
-        
-        # Step 2: Clean induced voltage
-        v_sec_clean = SignalProcessor.remove_dc_offset(ch2_volts)
-        
-        # Step 3 & 4: Integrate and Correct Drift to get B-Field
-        flux_raw = SignalProcessor.integrate_cumulative(v_sec_clean, time_col)
-        flux_corrected = SignalProcessor.apply_drift_correction(flux_raw)
-        
-        # Step 5: Convert Flux to Magnetic Flux Density (B)
-        B = Magnetics.calculate_B_field_scaling(flux_corrected, self.config)
-        
-        # Step 6: Calculate Specific Core Loss
-        loss = Magnetics.calculate_core_loss_density(H, B, time_col, frequency, self.config.Density)
-        
-        return H, B, loss
+        Args:
+            results: List of dicts [{'frequency': f, 'loss': l, 'filename': name}, ...]
+        """
+        # TODO: Implement aggregation and plotting for loss separation
+        pass
 
     def save_results(self, H, B, loss, filename, output_dir="output"):
         """
         Generates a plot of the B-H Loop and saves metrics to a file.
         """
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            
-        plt.figure(figsize=(8, 6))
-        plt.plot(H, B)
-        plt.title(f"B-H Loop: {filename}\nSpecific Loss: {loss:.4f} W/kg")
-        plt.xlabel("H (A/m)")
-        plt.ylabel("B (T)")
-        plt.grid(True)
-        
-        plot_path = os.path.join(output_dir, f"{filename}_bh_loop.png")
-        plt.savefig(plot_path)
-        plt.close()
-        
-        print(f"Result saved: {plot_path}")
+        # TODO: Implement plotting (Matplotlib)
+        pass

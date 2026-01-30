@@ -15,7 +15,8 @@ class SignalProcessor:
         Why: Oscilloscopes often have a slight DC bias that ruins integration.
         Logic: signal = signal - mean(signal)
         """
-        return data_array - np.mean(data_array)
+        # TODO: Implement DC offset removal
+        pass
 
     @staticmethod
     def integrate_cumulative(y_data, x_time):
@@ -28,8 +29,8 @@ class SignalProcessor:
         Returns:
             Integrated array (same length as input).
         """
-        # initial=0 ensures the output array has the same length as input
-        return integrate.cumtrapz(y_data, x_time, initial=0)
+        # TODO: Implement cumulative integration (scipy.integrate.cumtrapz)
+        pass
 
     @staticmethod
     def apply_drift_correction(integrated_signal):
@@ -43,5 +44,5 @@ class SignalProcessor:
             1. Use scipy.signal.detrend(data, type='linear') to remove the slope.
             2. Re-center the result around 0 (remove new mean).
         """
-        detrended = signal.detrend(integrated_signal, type='linear')
-        return detrended - np.mean(detrended)
+        # TODO: Implement linear drift correction
+        pass

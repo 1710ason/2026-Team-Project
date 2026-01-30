@@ -20,37 +20,26 @@ def main():
 
     print(f"Found {len(data_files)} files. Starting batch processing...\n")
 
+    batch_results = []
+
     # 4. Batch Process
     for file_path in data_files:
         filename = os.path.basename(file_path)
         print(f"Analyzing: {filename}")
         
-        try:
-            # Load Data
-            df = analyzer.load_data(file_path)
-            
-            # Infer frequency from filename if possible, otherwise default to 50Hz
-            # Example filename: 'data_400Hz_1.5T.csv'
-            frequency = 50
-            if "400Hz" in filename: frequency = 400
-            elif "100Hz" in filename: frequency = 100
-            
-            # Execute Pipeline
-            # Note: We assume the CSV has 'Time', 'Ch1_Voltage', 'Ch2_Voltage' columns
-            H, B, loss = analyzer.analyze_waveform(
-                df['Time'].values, 
-                df['Ch1_Voltage'].values, 
-                df['Ch2_Voltage'].values,
-                frequency
-            )
-            
-            # Save Visualizations & Output Metrics
-            analyzer.save_results(H, B, loss, filename.replace(".csv", ""))
-            
-            print(f"Success: Loss = {loss:.4f} W/kg\n")
-            
-        except Exception as e:
-            print(f"Error processing {filename}: {e}\n")
+        # TODO: Implement the batch processing loop
+        # 1. Load Data
+        # 2. Infer Frequency
+        # 3. Call analyzer.analyze_waveform
+        # 4. Call analyzer.save_results
+        # 5. Collect results for separation logic
+        
+        pass
+
+    # 5. Run Loss Separation if applicable
+    if batch_results:
+        # TODO: Call analyzer.perform_loss_separation
+        pass
 
 if __name__ == "__main__":
     main()
