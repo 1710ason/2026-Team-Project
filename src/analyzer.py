@@ -18,38 +18,51 @@ class TransformerCoreAnalyzer:
     def load_data(self, filepath):
         """
         Reads CSV and maps columns to standard names: Time, Ch1_Voltage, Ch2_Voltage.
+        Cleans common oscilloscope export quirks (units row, trailing comma/Unnamed cols).
         """
-        # Some scopes have metadata lines, let's try to find the header row
         try:
             df = pd.read_csv(filepath)
         except Exception as e:
             raise ValueError(f"Failed to parse CSV {filepath}: {e}")
 
+        # Drop empty/extra columns caused by trailing commas (e.g. "Unnamed: 3")
+        df = df.loc[:, ~df.columns.astype(str).str.contains(r"^Unnamed")]
+
+        # Strip whitespace/trailing commas from headers
+        df.columns = [str(c).strip().rstrip(",") for c in df.columns]
+
         # Standardize column names (case-insensitive and partial matching)
         mapping = {}
         target_cols = ['Time', 'Ch1_Voltage', 'Ch2_Voltage']
-        
+
         for col in df.columns:
             c_low = str(col).lower()
             if 'time' in c_low or 'second' in c_low or 'x-axis' in c_low:
                 mapping[col] = 'Time'
-            elif 'ch1' in c_low or 'current' in c_low or 'shunt' in c_low or col == '1':
+            elif 'ch1' in c_low or 'current' in c_low or 'shunt' in c_low or str(col) == '1':
                 mapping[col] = 'Ch1_Voltage'
-            elif 'ch2' in c_low or 'volt' in c_low or 'sec' in c_low or col == '2':
+            elif 'ch2' in c_low or 'volt' in c_low or 'sec' in c_low or str(col) == '2':
                 mapping[col] = 'Ch2_Voltage'
 
         # If we didn't find clear matches, assume columns 0, 1, 2
         if len(set(mapping.values())) < 3:
             print(f"  [Notice] Unclear headers in {os.path.basename(filepath)}. Using index-based mapping (0,1,2).")
-            new_cols = list(df.columns)
-            new_cols[0] = 'Time'
-            new_cols[1] = 'Ch1_Voltage'
-            new_cols[2] = 'Ch2_Voltage'
-            df.columns = new_cols
+            df = df.iloc[:, :3].copy()  # keep only first 3 cols to be safe
+            df.columns = target_cols
         else:
             df = df.rename(columns=mapping)
-            
-        return df[target_cols]  # Return only the needed columns
+            df = df[target_cols].copy()
+
+        # ---- CRITICAL: remove units row / any stray strings, then force numeric ----
+        # If first row contains things like "(ms)" "(V)" etc, drop it
+        first_row = df.iloc[0].astype(str)
+        if first_row.str.contains(r"\(|\)", regex=True).any():
+            df = df.iloc[1:].reset_index(drop=True)
+
+        # Convert to numeric, drop any rows that didn't convert
+        df = df.apply(pd.to_numeric, errors="coerce").dropna()
+
+        return df
 
     def analyze_waveform(self, time_col, ch1_volts, ch2_volts, frequency):
         """

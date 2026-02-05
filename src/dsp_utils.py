@@ -29,7 +29,8 @@ class SignalProcessor:
             Integrated array (same length as input).
         """
         # initial=0 ensures the output array has the same length as input
-        return integrate.cumtrapz(y_data, x_time, initial=0)
+        return integrate.cumulative_trapezoid(y_data, x_time, initial=0)
+
 
     @staticmethod
     def apply_drift_correction(integrated_signal):
