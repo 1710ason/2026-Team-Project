@@ -37,33 +37,28 @@ class Magnetics:
     @staticmethod
     def calculate_core_loss_density(H_field, B_field, time, frequency, density):
         """
-        Calculates specific core loss (W/kg).
+        Calculates specific core loss (W/kg) using the B-H loop area method.
         
         Logic:
-            Energy per unit volume (J/m^3) = Area of B-H loop = Integral(H dB)
-            Power per unit mass (W/kg) = (Energy_per_volume * Frequency) / Density
+            Energy per unit volume (J/m^3) = Integral(H dB)
+            Power per unit mass (W/kg) = (Total Energy / Total Time) / Density
             
-        Args:
-            H_field: Array of H values [A/m]
-            B_field: Array of B values [T]
-            time: Array of time values [s]
-            frequency: Fundamental frequency of the waveform [Hz]
-            density: Material density [kg/m^3]
-        
-        Returns:
-            specific_loss (W/kg)
+        This method is superior to H*dB/dt because integration naturally filters 
+        high-frequency measurement noise.
         """
-        # Calculate dB/dt to use as the differential
-        db_dt = np.gradient(B_field, time)
+        # 1. Calculate the total energy density over the captured duration (J/m^3)
+        # We use np.trapz(y, x) which computes Integral(y dx)
+        total_energy_vol = np.trapz(H_field, B_field)
         
-        # Power density (W/m^3) = H * dB/dt
-        p_density = H_field * db_dt
+        # 2. Get the actual duration of the captured trace
+        duration = time[-1] - time[0]
+        if duration <= 0:
+            return 0.0
         
-        # Average power density over the whole cycle
-        # We integrate p_density over time for a full cycle and then divide by period,
-        # or just take the mean of the instantaneous power density.
-        avg_power_vol = np.mean(p_density)
+        # 3. Average Power Density (W/m^3) = Total Energy / Total Time
+        # This is mathematically equivalent to (Energy_per_cycle * frequency)
+        avg_power_vol = total_energy_vol / duration
         
-        # specific_loss (W/kg) = (W/m^3) / (kg/m^3)
-        specific_loss = avg_power_vol / density
-        return abs(specific_loss)
+        # 4. specific_loss (W/kg) = (W/m^3) / (kg/m^3)
+        specific_loss = abs(avg_power_vol) / density
+        return specific_loss

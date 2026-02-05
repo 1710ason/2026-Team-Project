@@ -23,20 +23,25 @@ def main():
     # 4. Batch Process
     for file_path in data_files:
         filename = os.path.basename(file_path)
-        print(f"Analyzing: {filename}")
+        print(f"--- Analyzing: {filename} ---")
         
         try:
             # Load Data
             df = analyzer.load_data(file_path)
             
-            # Infer frequency from filename if possible, otherwise default to 50Hz
+            # Infer frequency from filename if possible
             # Example filename: 'data_400Hz_1.5T.csv'
+            fname_lower = filename.lower()
             frequency = 50
-            if "400Hz" in filename: frequency = 400
-            elif "100Hz" in filename: frequency = 100
+            if "400hz" in fname_lower: 
+                frequency = 400
+            elif "100hz" in fname_lower: 
+                frequency = 100
+            else:
+                print(f"  [Info] Frequency not found in filename. Defaulting to {frequency}Hz.")
             
             # Execute Pipeline
-            # Note: We assume the CSV has 'Time', 'Ch1_Voltage', 'Ch2_Voltage' columns
+            # Note: We assume the CSV has 'Time', 'Ch1_Voltage', 'Ch2_Voltage' columns after load_data standardization
             H, B, loss = analyzer.analyze_waveform(
                 df['Time'].values, 
                 df['Ch1_Voltage'].values, 

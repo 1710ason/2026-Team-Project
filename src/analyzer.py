@@ -17,18 +17,39 @@ class TransformerCoreAnalyzer:
 
     def load_data(self, filepath):
         """
-        Reads CSV using pandas. Expects columns: Time, Ch1_Voltage, Ch2_Voltage.
-        
-        Args:
-            filepath: Path to the CSV file.
-        Returns:
-            pandas DataFrame.
+        Reads CSV and maps columns to standard names: Time, Ch1_Voltage, Ch2_Voltage.
         """
-        # Load data, assuming headers exist. Skip header if necessary.
-        df = pd.read_csv(filepath)
-        # Rename columns to standard names for internal consistency if needed
-        # Expected: Time, Ch1_Voltage, Ch2_Voltage
-        return df
+        # Some scopes have metadata lines, let's try to find the header row
+        try:
+            df = pd.read_csv(filepath)
+        except Exception as e:
+            raise ValueError(f"Failed to parse CSV {filepath}: {e}")
+
+        # Standardize column names (case-insensitive and partial matching)
+        mapping = {}
+        target_cols = ['Time', 'Ch1_Voltage', 'Ch2_Voltage']
+        
+        for col in df.columns:
+            c_low = str(col).lower()
+            if 'time' in c_low or 'second' in c_low or 'x-axis' in c_low:
+                mapping[col] = 'Time'
+            elif 'ch1' in c_low or 'current' in c_low or 'shunt' in c_low or col == '1':
+                mapping[col] = 'Ch1_Voltage'
+            elif 'ch2' in c_low or 'volt' in c_low or 'sec' in c_low or col == '2':
+                mapping[col] = 'Ch2_Voltage'
+
+        # If we didn't find clear matches, assume columns 0, 1, 2
+        if len(set(mapping.values())) < 3:
+            print(f"  [Notice] Unclear headers in {os.path.basename(filepath)}. Using index-based mapping (0,1,2).")
+            new_cols = list(df.columns)
+            new_cols[0] = 'Time'
+            new_cols[1] = 'Ch1_Voltage'
+            new_cols[2] = 'Ch2_Voltage'
+            df.columns = new_cols
+        else:
+            df = df.rename(columns=mapping)
+            
+        return df[target_cols]  # Return only the needed columns
 
     def analyze_waveform(self, time_col, ch1_volts, ch2_volts, frequency):
         """
