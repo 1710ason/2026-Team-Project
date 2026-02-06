@@ -49,10 +49,21 @@ def main():
                 frequency
             )
             
+            # Calculate detailed magnetic properties
+            from src.physics import Magnetics
+            mag_params = Magnetics.calculate_hysteresis_params(H, B)
+            
             # Save Visualizations & Output Metrics
             analyzer.save_results(H, B, loss, filename.replace(".csv", ""))
             
-            print(f"Success: Loss = {loss:.4f} W/kg\n")
+            print(f"Results for {filename}:")
+            print(f"  Specific Loss: {loss:.4f} W/kg")
+            print(f"  B_peak:        {mag_params['B_peak']:.4f} T")
+            print(f"  H_peak:        {mag_params['H_peak']:.4f} A/m")
+            print(f"  Coercivity:    {mag_params['Hc']:.4f} A/m")
+            print(f"  Remanence:     {mag_params['Br']:.4f} T")
+            print(f"  Rel. Perm.:    {mag_params['mu_r']:.2f}")
+            print("-" * 30 + "\n")
             
         except Exception as e:
             print(f"Error processing {filename}: {e}\n")

@@ -62,3 +62,52 @@ class Magnetics:
         # 4. specific_loss (W/kg) = (W/m^3) / (kg/m^3)
         specific_loss = abs(avg_power_vol) / density
         return specific_loss
+
+    @staticmethod
+    def calculate_hysteresis_params(H, B):
+        """
+        Extracts key magnetic parameters from the B-H loop.
+        """
+        # 1. Peak Values
+        H_peak = np.max(np.abs(H))
+        B_peak = np.max(np.abs(B))
+        
+        # 2. Coercivity (Hc): H value where B crosses 0
+        # We find indices where signs change
+        sign_changes = np.where(np.diff(np.signbit(B)))[0]
+        Hc_values = []
+        for idx in sign_changes:
+            # Linear interpolation for better accuracy
+            b1, b2 = B[idx], B[idx+1]
+            h1, h2 = H[idx], H[idx+1]
+            if b2 != b1:
+                h_zero = h1 - b1 * ((h2 - h1) / (b2 - b1))
+                Hc_values.append(abs(h_zero))
+        Hc = np.mean(Hc_values) if Hc_values else 0.0
+
+        # 3. Remanence (Br): B value where H crosses 0
+        sign_changes_h = np.where(np.diff(np.signbit(H)))[0]
+        Br_values = []
+        for idx in sign_changes_h:
+            h1, h2 = H[idx], H[idx+1]
+            b1, b2 = B[idx], B[idx+1]
+            if h2 != h1:
+                b_zero = b1 - h1 * ((b2 - b1) / (h2 - h1))
+                Br_values.append(abs(b_zero))
+        Br = np.mean(Br_values) if Br_values else 0.0
+        
+        # 4. Relative Amplitude Permeability (mu_r)
+        # mu = B / H, mu_r = mu / mu_0
+        mu_0 = 4 * np.pi * 1e-7
+        if H_peak > 0:
+            mu_amp = (B_peak / H_peak) / mu_0
+        else:
+            mu_amp = 0.0
+            
+        return {
+            "B_peak": B_peak,
+            "H_peak": H_peak,
+            "Hc": Hc,
+            "Br": Br,
+            "mu_r": mu_amp
+        }
