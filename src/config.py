@@ -21,8 +21,8 @@ class HardwareConstants:
         return cls(
             N1=20,
             N2=14,
-            Ae=4.86e-4,  # 0.3mm stacking factor applied
+            Ae=1.058e-3
             Lm=0.05,
-            Rsense=18,
+            Rsense=17.5,
             Density=7650.0
         )
