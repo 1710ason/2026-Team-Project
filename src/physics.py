@@ -31,7 +31,7 @@ class Magnetics:
         Returns:
             B_field array [Tesla]
         """
-        b_field =  (1 / (hardware_params.N2 * hardware_params.Ae)) * integrated_voltage
+        b_field = - (1 / (hardware_params.N2 * hardware_params.Ae)) * integrated_voltage
         return b_field
 
     @staticmethod
