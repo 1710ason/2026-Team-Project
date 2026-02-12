@@ -1,5 +1,6 @@
 import os
 import glob
+import re
 from src.config import HardwareConstants
 from src.analyzer import TransformerCoreAnalyzer
 
@@ -29,15 +30,14 @@ def main():
             # Load Data
             df = analyzer.load_data(file_path)
             
-            # Infer frequency from filename if possible
-            # Example filename: 'data_400Hz_1.5T.csv'
-            fname_lower = filename.lower()
-            frequency = 50
-            if "400hz" in fname_lower: 
-                frequency = 400
-            elif "100hz" in fname_lower: 
-                frequency = 100
+            # Infer frequency from filename using Regex
+            # Example filename: 'data_400Hz_1.5T.csv' or 'GOSS_50Hz_TEST.csv'
+            match = re.search(r"(\d+)Hz", filename, re.IGNORECASE)
+            if match:
+                frequency = int(match.group(1))
+                print(f"  [Info] Extracted Frequency: {frequency}Hz")
             else:
+                frequency = 50
                 print(f"  [Info] Frequency not found in filename. Defaulting to {frequency}Hz.")
             
             # Execute Pipeline

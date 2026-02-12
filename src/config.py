@@ -19,10 +19,10 @@ class HardwareConstants:
     def default_hwr90_32(cls):
         """Factory method returning the standard config for HWR90/32 core."""
         return cls(
-            N1=20,
-            N2=14,
+            N1=37,
+            N2=20,
             Ae=1.058e-3,
-            Lm=0.05,
-            Rsense=17.5,
+            Lm=0.3,
+            Rsense=21,
             Density=7650.0
         )

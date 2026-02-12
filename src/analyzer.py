@@ -39,9 +39,9 @@ class TransformerCoreAnalyzer:
             c_low = str(col).lower()
             if 'time' in c_low or 'second' in c_low or 'x-axis' in c_low:
                 mapping[col] = 'Time'
-            elif 'ch1' in c_low or 'current' in c_low or 'shunt' in c_low or str(col) == '1':
+            elif 'ch1' in c_low or 'current' in c_low or 'shunt' in c_low or 'channel a' in c_low or 'input' in c_low or str(col) == '1':
                 mapping[col] = 'Ch1_Voltage'
-            elif 'ch2' in c_low or 'volt' in c_low or 'sec' in c_low or str(col) == '2':
+            elif 'ch2' in c_low or 'volt' in c_low or 'sec' in c_low or 'channel b' in c_low or 'output' in c_low or str(col) == '2':
                 mapping[col] = 'Ch2_Voltage'
 
         # If we didn't find clear matches, assume columns 0, 1, 2
@@ -53,14 +53,25 @@ class TransformerCoreAnalyzer:
             df = df.rename(columns=mapping)
             df = df[target_cols].copy()
 
-        # ---- CRITICAL: remove units row / any stray strings, then force numeric ----
-        # If first row contains things like "(ms)" "(V)" etc, drop it
-        first_row = df.iloc[0].astype(str)
-        if first_row.str.contains(r"\(|\)", regex=True).any():
-            df = df.iloc[1:].reset_index(drop=True)
+        # ---- CRITICAL: Handle Units & Convert Time ----
+        # Check first row for units (e.g., "(ms)", "(V)")
+        time_scaling_factor = 1.0
+        if not df.empty:
+            first_row = df.iloc[0].astype(str).tolist()
+            # Check if Time column (index 0) has 'ms' in the units row
+            if 'ms' in str(first_row[0]).lower():
+                time_scaling_factor = 1e-3
+                print(f"  [Info] Detected 'ms' time units in {os.path.basename(filepath)}. Converting to seconds.")
+            
+            # If any value in the first row looks like a unit, drop the row
+            if any(x for x in first_row if "(" in x or ")" in x):
+                df = df.iloc[1:].reset_index(drop=True)
 
         # Convert to numeric, drop any rows that didn't convert
         df = df.apply(pd.to_numeric, errors="coerce").dropna()
+        
+        # Apply Time Scaling
+        df['Time'] = df['Time'] * time_scaling_factor
 
         return df
 
