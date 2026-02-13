@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import integrate
 
 class Magnetics:
     """
@@ -47,8 +48,8 @@ class Magnetics:
         high-frequency measurement noise.
         """
         # 1. Calculate the total energy density over the captured duration (J/m^3)
-        # We use np.trapz(y, x) which computes Integral(y dx)
-        total_energy_vol = np.trapz(H_field, B_field)
+        # Fix for NumPy 2.x: np.trapz is removed, use scipy.integrate.trapezoid
+        total_energy_vol = integrate.trapezoid(H_field, B_field)
         
         # 2. Get the actual duration of the captured trace
         duration = time[-1] - time[0]
@@ -64,6 +65,40 @@ class Magnetics:
         return specific_loss
 
     @staticmethod
+    def calculate_differential_permeability(H_field, B_field, time_array):
+        """
+        Calculates Relative Differential Permeability: mu_diff(t) = (dB/dt) / (dH/dt) / mu_0
+        """
+        mu_0 = 4 * np.pi * 1e-7
+
+        H = np.asarray(H_field, dtype=float)
+        B = np.asarray(B_field, dtype=float)
+        t = np.asarray(time_array, dtype=float)
+
+        if not (len(H) == len(B) == len(t)):
+            raise ValueError("H_field, B_field, and time_array must have the same length")
+        if len(t) < 3:
+            return np.full_like(H, np.nan, dtype=float)
+
+        edge_order = 2 if len(t) >= 3 else 1
+        dB_dt = np.gradient(B, t, edge_order=edge_order)
+        dH_dt = np.gradient(H, t, edge_order=edge_order)
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            mu_diff = dB_dt / dH_dt
+
+        mu_diff_r = mu_diff / mu_0
+
+        # Mask singularities where dH/dt is near zero.
+        # Use a scale-aware threshold so masking works across different amplitudes.
+        slope_scale = np.nanmax(np.abs(dH_dt))
+        threshold = max(1e-7, slope_scale * 1e-3)
+        mu_diff_r[np.abs(dH_dt) <= threshold] = np.nan
+        mu_diff_r[~np.isfinite(mu_diff_r)] = np.nan
+
+        return mu_diff_r
+
+    @staticmethod
     def calculate_hysteresis_params(H, B):
         """
         Extracts key magnetic parameters from the B-H loop.
@@ -73,11 +108,9 @@ class Magnetics:
         B_peak = np.max(np.abs(B))
         
         # 2. Coercivity (Hc): H value where B crosses 0
-        # We find indices where signs change
         sign_changes = np.where(np.diff(np.signbit(B)))[0]
         Hc_values = []
         for idx in sign_changes:
-            # Linear interpolation for better accuracy
             b1, b2 = B[idx], B[idx+1]
             h1, h2 = H[idx], H[idx+1]
             if b2 != b1:
@@ -96,18 +129,14 @@ class Magnetics:
                 Br_values.append(abs(b_zero))
         Br = np.mean(Br_values) if Br_values else 0.0
         
-        # 4. Relative Amplitude Permeability (mu_r)
-        # mu = B / H, mu_r = mu / mu_0
+        # 4. Relative Amplitude Permeability (mu_amp)
         mu_0 = 4 * np.pi * 1e-7
-        if H_peak > 0:
-            mu_amp = (B_peak / H_peak) / mu_0
-        else:
-            mu_amp = 0.0
+        mu_amp = (B_peak / H_peak) / mu_0 if H_peak > 0 else 0.0
             
         return {
             "B_peak": B_peak,
             "H_peak": H_peak,
             "Hc": Hc,
             "Br": Br,
-            "mu_r": mu_amp
+            "mu_amp": mu_amp
         }
