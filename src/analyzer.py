@@ -11,7 +11,67 @@ class TransformerCoreAnalyzer:
     Main controller class. 
     Instantiate this once with hardware config, then process multiple files.
     """
+    def save_comparison_plots(self, time, debug, filename, output_dir="output"):
+        """
+        Saves before vs after moving-average comparison plots.
+        Produces:
+          1) Induced voltage (clean vs smoothed)
+          2) B(t) before vs after
+          3) B-H loop before vs after
+        """
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
+        t = time
+        H = debug["H"]
+        v0 = debug["v_sec_clean"]
+        v1 = debug["v_sec_smooth"]
+        B0 = debug["B_before"]
+        B1 = debug["B_after"]
+
+        loss0 = debug["loss_before"]
+        loss1 = debug["loss_after"]
+
+        # --- 1) Voltage comparison ---
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.plot(t, v0, label="Vsec (DC removed)")
+        ax.plot(t, v1, label="Vsec (moving average)")
+        ax.set_title(f"Induced voltage smoothing: {filename}")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Voltage (V)")
+        ax.grid(True)
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(os.path.join(output_dir, f"{filename}_vsec_compare.png"), dpi=200)
+        plt.close(fig)
+
+        # --- 2) B(t) comparison ---
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.plot(t, B0, label=f"B before (loss={loss0:.4f} W/kg)")
+        ax.plot(t, B1, label=f"B after  (loss={loss1:.4f} W/kg)")
+        ax.set_title(f"B-field comparison: {filename}")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("B (T)")
+        ax.grid(True)
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(os.path.join(output_dir, f"{filename}_B_compare.png"), dpi=200)
+        plt.close(fig)
+
+        # --- 3) B-H loop comparison ---
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(H, B0, label="Before smoothing")
+        ax.plot(H, B1, label="After smoothing")
+        ax.set_title(f"B-H loop compare: {filename}\nLoss before={loss0:.4f}, after={loss1:.4f} W/kg")
+        ax.set_xlabel("H (A/m)")
+        ax.set_ylabel("B (T)")
+        ax.grid(True)
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(os.path.join(output_dir, f"{filename}_BH_compare.png"), dpi=200)
+        plt.close(fig)
+
+        
     def __init__(self, config: HardwareConstants):
         self.config = config
 
@@ -75,56 +135,85 @@ class TransformerCoreAnalyzer:
 
         return df
 
-    def analyze_waveform(self, time_col, ch1_volts, ch2_volts, frequency):
+    def analyze_waveform(
+        self,
+        time_col,
+        ch1_volts,
+        ch2_volts,
+        frequency,
+        ma_window: int = 1,          # NEW
+        return_debug: bool = False   # NEW
+    ):
         """
-        Executes the full pipeline on a single dataset.
-        
-        Flow:
-            1. Physics: Convert Ch1 -> Current -> H_field.
-            2. DSP: Remove DC from Ch2 (induced voltage).
-            3. DSP: Integrate Ch2 to get raw Flux.
-            4. DSP: Apply Drift Correction (Detrending) to Flux.
-            5. Physics: Scale Flux -> B_field (Tesla).
-            6. Physics: Calculate Loss (W/kg).
-            
-        Returns:
-            H_field, B_field, specific_loss
+        Full pipeline on a single dataset.
+
+        New:
+            - Optional moving-average smoothing on Ch2 before integration.
+            - Optional debug return of intermediate arrays for plotting.
         """
-        
-        # Step 1: H-Field calculation from Shunt Voltage
+
+        # Step 1: H-field from shunt voltage
         H = Magnetics.calculate_H_field(ch1_volts, self.config)
-        
-        # Step 2: Clean induced voltage
+
+        # Step 2: remove DC from induced voltage
         v_sec_clean = SignalProcessor.remove_dc_offset(ch2_volts)
-        
-        # Step 3 & 4: Integrate and Correct Drift to get B-Field
-        flux_raw = SignalProcessor.integrate_cumulative(v_sec_clean, time_col)
-        flux_corrected = SignalProcessor.apply_drift_correction(flux_raw)
-        
-        # Step 5: Convert Flux to Magnetic Flux Density (B)
-        B = Magnetics.calculate_B_field_scaling(flux_corrected, self.config)
-        
-        # Step 6: Calculate Specific Core Loss
-        loss = Magnetics.calculate_core_loss_density(H, B, time_col, frequency, self.config.Density)
-        
-        return H, B, loss
+
+        # NEW Step 2b: optional moving average on induced voltage (pre-integration)
+        # choose a window in seconds (start small!)
+        # 0.0002 s = 0.2 ms ~ 1% of a 50 Hz period
+        MA_WINDOW_S = 2e-4
+        v_sec_smooth = SignalProcessor.moving_average_time(v_sec_clean, time_col, MA_WINDOW_S)
+
+
+        # Step 3/4: integrate and drift correct (both paths)
+        flux_raw_before = SignalProcessor.integrate_cumulative(v_sec_clean, time_col)
+        flux_corr_before = SignalProcessor.apply_drift_correction(flux_raw_before)
+        B_before = Magnetics.calculate_B_field_scaling(flux_corr_before, self.config)
+
+        flux_raw_after = SignalProcessor.integrate_cumulative(v_sec_smooth, time_col)
+        flux_corr_after = SignalProcessor.apply_drift_correction(flux_raw_after)
+        B_after = Magnetics.calculate_B_field_scaling(flux_corr_after, self.config)
+
+        # Step 6: loss both paths
+        loss_before = Magnetics.calculate_core_loss_density(H, B_before, time_col, frequency, self.config.Density)
+        loss_after  = Magnetics.calculate_core_loss_density(H, B_after,  time_col, frequency, self.config.Density)
+
+        if return_debug:
+            debug = {
+                "H": H,
+                "v_sec_clean": v_sec_clean,
+                "v_sec_smooth": v_sec_smooth,
+                "B_before": B_before,
+                "B_after": B_after,
+                "loss_before": loss_before,
+                "loss_after": loss_after,
+            }
+            return H, B_after, loss_after, debug
+
+        # default return keeps old style but returns the "after" pipeline
+        return H, B_after, loss_after
 
     def save_results(self, H, B, loss, filename, output_dir="output"):
         """
         Generates a plot of the B-H Loop and saves metrics to a file.
+        Also shows the plot interactively.
         """
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-            
+
         plt.figure(figsize=(8, 6))
         plt.plot(H, B)
         plt.title(f"B-H Loop: {filename}\nSpecific Loss: {loss:.4f} W/kg")
         plt.xlabel("H (A/m)")
         plt.ylabel("B (T)")
         plt.grid(True)
-        
+
         plot_path = os.path.join(output_dir, f"{filename}_bh_loop.png")
         plt.savefig(plot_path)
-        plt.close()
-        
+
+        plt.show()     # <-- THIS makes it appear interactively
+
+        # Optional: remove close if you want window to stay open
+        # plt.close()
+
         print(f"Result saved: {plot_path}")

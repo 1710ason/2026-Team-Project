@@ -1,11 +1,74 @@
 import numpy as np
 from scipy import integrate, signal
 
+# src/dsp_utils.py
+import numpy as np
+from scipy import integrate, signal
+
 class SignalProcessor:
-    """
-    Static utility class for Digital Signal Processing.
-    Handles integration, filtering, and drift correction.
-    """
+    ...
+
+
+    @staticmethod
+    def moving_average_time(x: np.ndarray, t: np.ndarray, window_s: float, mode: str = "reflect") -> np.ndarray:
+        """
+        Centered moving average where the window is defined in SECONDS.
+        This makes smoothing consistent across files with different sample rates.
+        """
+        x = np.asarray(x, dtype=float)
+        t = np.asarray(t, dtype=float)
+
+        dt = np.median(np.diff(t))
+        if dt <= 0:
+            return x.copy()
+
+        M = int(round(window_s / dt))
+        if M <= 1:
+            return x.copy()
+
+        if M % 2 == 0:
+            M += 1
+
+        pad = M // 2
+        x_pad = np.pad(x, pad_width=pad, mode=mode)
+        kernel = np.ones(M, dtype=float) / M
+        y = np.convolve(x_pad, kernel, mode="valid")
+        return y
+    
+    
+    @staticmethod
+    def moving_average(x: np.ndarray, window: int, mode: str = "reflect") -> np.ndarray:
+        """
+        Centered moving average (zero-phase) using symmetric padding.
+
+        Args:
+            x: input signal (1D array)
+            window: number of samples in the averaging window (must be >= 1)
+            mode: padding mode for np.pad. 'reflect' is usually good for waveforms.
+
+        Returns:
+            Smoothed signal (same length as x)
+
+        Notes:
+            - Centered MA avoids time-lag/phase shift compared to a causal MA.
+            - window should be odd for perfectly symmetric centering (we enforce it).
+        """
+        x = np.asarray(x, dtype=float)
+
+        if window <= 1:
+            return x.copy()
+
+        # enforce odd window for true centering
+        if window % 2 == 0:
+            window += 1
+
+        pad = window // 2
+        x_pad = np.pad(x, pad_width=pad, mode=mode)
+
+        kernel = np.ones(window, dtype=float) / window
+        y = np.convolve(x_pad, kernel, mode="valid")  # returns len(x)
+        return y
+
 
     @staticmethod
     def remove_dc_offset(data_array):

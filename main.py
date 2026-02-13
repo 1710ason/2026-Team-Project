@@ -3,6 +3,9 @@ import glob
 import re
 from src.config import HardwareConstants
 from src.analyzer import TransformerCoreAnalyzer
+import matplotlib.pyplot as plt
+
+plt.ion()  # interactive mode ON
 
 def main():
     # 1. Initialize Configuration (HWR90/32 Core)
@@ -42,19 +45,31 @@ def main():
             
             # Execute Pipeline
             # Note: We assume the CSV has 'Time', 'Ch1_Voltage', 'Ch2_Voltage' columns after load_data standardization
-            H, B, loss = analyzer.analyze_waveform(
-                df['Time'].values, 
-                df['Ch1_Voltage'].values, 
+            # main.py
+            MA_WINDOW = 21  # try 11, 21, 31; must be "small" vs a 50 Hz period
+
+            H, B, loss, debug = analyzer.analyze_waveform(
+                df['Time'].values,
+                df['Ch1_Voltage'].values,
                 df['Ch2_Voltage'].values,
-                frequency
-            )
+                frequency,
+                ma_window=MA_WINDOW,
+                return_debug=True
+                )
+
+            # Save original single-loop plot (this will now be the "after" pipeline)
+            analyzer.save_results(H, B, loss, filename.replace(".csv", ""))
+
+            # NEW: save before/after comparisons
+            analyzer.save_comparison_plots(df['Time'].values, debug, filename.replace(".csv", ""))
+
             
             # Calculate detailed magnetic properties
             from src.physics import Magnetics
             mag_params = Magnetics.calculate_hysteresis_params(H, B)
             
             # Save Visualizations & Output Metrics
-            analyzer.save_results(H, B, loss, filename.replace(".csv", ""))
+            #analyzer.save_results(H, B, loss, filename.replace(".csv", ""))
             
             print(f"Results for {filename}:")
             print(f"  Specific Loss: {loss:.4f} W/kg")
