@@ -42,7 +42,7 @@ def main():
             
             # Execute Pipeline
             # Note: We assume the CSV has 'Time', 'Ch1_Voltage', 'Ch2_Voltage' columns after load_data standardization
-            H, B, loss = analyzer.analyze_waveform(
+            H, B, loss, mu_diff_r = analyzer.analyze_waveform(
                 df['Time'].values, 
                 df['Ch1_Voltage'].values, 
                 df['Ch2_Voltage'].values,
@@ -54,7 +54,7 @@ def main():
             mag_params = Magnetics.calculate_hysteresis_params(H, B)
             
             # Save Visualizations & Output Metrics
-            analyzer.save_results(H, B, loss, filename.replace(".csv", ""))
+            analyzer.save_results(H, B, loss, mu_diff_r, filename.replace(".csv", ""))
             
             print(f"Results for {filename}:")
             print(f"  Specific Loss: {loss:.4f} W/kg")
@@ -62,7 +62,7 @@ def main():
             print(f"  H_peak:        {mag_params['H_peak']:.4f} A/m")
             print(f"  Coercivity:    {mag_params['Hc']:.4f} A/m")
             print(f"  Remanence:     {mag_params['Br']:.4f} T")
-            print(f"  Rel. Perm.:    {mag_params['mu_r']:.2f}")
+            print(f"  Rel. Amp Perm: {mag_params['mu_amp']:.2f}")
             print("-" * 30 + "\n")
             
         except Exception as e:

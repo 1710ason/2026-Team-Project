@@ -80,22 +80,30 @@ class TransformerCoreAnalyzer:
         Executes the full pipeline on a single dataset.
         
         Flow:
-            1. Physics: Convert Ch1 -> Current -> H_field.
-            2. DSP: Remove DC from Ch2 (induced voltage).
-            3. DSP: Integrate Ch2 to get raw Flux.
-            4. DSP: Apply Drift Correction (Detrending) to Flux.
-            5. Physics: Scale Flux -> B_field (Tesla).
-            6. Physics: Calculate Loss (W/kg).
+            1. DSP: Smooth raw signals (Current & Voltage) to remove quantization noise.
+            2. Physics: Convert Ch1 -> Current -> H_field.
+            3. DSP: Remove DC from Ch2 (induced voltage).
+            4. DSP: Integrate Ch2 to get raw Flux.
+            5. DSP: Apply Drift Correction (Detrending) to Flux.
+            6. Physics: Scale Flux -> B_field (Tesla).
+            7. Physics: Calculate Loss (W/kg).
+            8. Physics: Calculate Differential Permeability.
             
         Returns:
-            H_field, B_field, specific_loss
+            H_field, B_field, specific_loss, mu_r
         """
         
+        # Step 0: Pre-processing (Smoothing)
+        # Use a window relative to frequency if possible, or a safe default
+        # For now, default 51 is used inside smooth_signal
+        ch1_smooth = SignalProcessor.smooth_signal(ch1_volts)
+        ch2_smooth = SignalProcessor.smooth_signal(ch2_volts)
+        
         # Step 1: H-Field calculation from Shunt Voltage
-        H = Magnetics.calculate_H_field(ch1_volts, self.config)
+        H = Magnetics.calculate_H_field(ch1_smooth, self.config)
         
         # Step 2: Clean induced voltage
-        v_sec_clean = SignalProcessor.remove_dc_offset(ch2_volts)
+        v_sec_clean = SignalProcessor.remove_dc_offset(ch2_smooth)
         
         # Step 3 & 4: Integrate and Correct Drift to get B-Field
         flux_raw = SignalProcessor.integrate_cumulative(v_sec_clean, time_col)
@@ -107,23 +115,43 @@ class TransformerCoreAnalyzer:
         # Step 6: Calculate Specific Core Loss
         loss = Magnetics.calculate_core_loss_density(H, B, time_col, frequency, self.config.Density)
         
-        return H, B, loss
+        # Step 7: Calculate Differential Permeability
+        mu_r = Magnetics.calculate_differential_permeability(H, B, time_col)
+        
+        return H, B, loss, mu_r
 
-    def save_results(self, H, B, loss, filename, output_dir="output"):
+    def save_results(self, H, B, loss, mu_diff_r, filename, output_dir="output"):
         """
-        Generates a plot of the B-H Loop and saves metrics to a file.
+        Generates plots of the B-H Loop and Permeability, saving them to files.
         """
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             
-        plt.figure(figsize=(8, 6))
-        plt.plot(H, B)
-        plt.title(f"B-H Loop: {filename}\nSpecific Loss: {loss:.4f} W/kg")
+        # Plot 1: B-H Loop
+        plt.figure(figsize=(10, 6))
+        plt.subplot(1, 2, 1)
+        plt.plot(H, B, 'b-')
+        plt.title(f"B-H Loop: {filename}\nLoss: {loss:.4f} W/kg")
         plt.xlabel("H (A/m)")
         plt.ylabel("B (T)")
         plt.grid(True)
         
-        plot_path = os.path.join(output_dir, f"{filename}_bh_loop.png")
+        # Plot 2: Permeability vs H
+        plt.subplot(1, 2, 2)
+        # Filter NaNs for plotting (matplotlib handles NaNs by breaking the line, which is desired)
+        plt.plot(H, mu_diff_r, 'r-')
+        plt.title(f"Rel. Differential Permeability ($\\mu_{{diff,r}}$)")
+        plt.xlabel("H (A/m)")
+        plt.ylabel("$\\mu_{{diff,r}}$")
+        plt.grid(True)
+        
+        # Set reasonable y-limits to avoid auto-scaling on noise spikes
+        valid_mu = mu_diff_r[~np.isnan(mu_diff_r)]
+        if len(valid_mu) > 0:
+            plt.ylim(0, np.nanpercentile(valid_mu, 98) * 1.2) 
+        
+        plt.tight_layout()
+        plot_path = os.path.join(output_dir, f"{filename}_analysis.png")
         plt.savefig(plot_path)
         plt.close()
         
