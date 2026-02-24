@@ -37,11 +37,19 @@ class TransformerCoreAnalyzer:
 
         for col in df.columns:
             c_low = str(col).lower()
-            if 'time' in c_low or 'second' in c_low or 'x-axis' in c_low:
+            
+            # 1. Time / X-Axis
+            # Must contain 'time' or be a specific time unit, but NOT 'secondary'
+            if ('time' in c_low or 'x-axis' in c_low or 
+                (any(unit in c_low for unit in ['second', 'sec', '(s)', '(ms)']) and 'secondary' not in c_low)):
                 mapping[col] = 'Time'
-            elif 'ch1' in c_low or 'current' in c_low or 'shunt' in c_low or 'channel a' in c_low or 'input' in c_low or str(col) == '1':
+            
+            # 2. Ch1_Voltage (Primary / Current / Shunt)
+            elif any(k in c_low for k in ['ch1', 'primary', 'shunt', 'channel a', 'input', 'current']) or str(col) == '1':
                 mapping[col] = 'Ch1_Voltage'
-            elif 'ch2' in c_low or 'volt' in c_low or 'sec' in c_low or 'channel b' in c_low or 'output' in c_low or str(col) == '2':
+                
+            # 3. Ch2_Voltage (Secondary / Induced / Volt)
+            elif any(k in c_low for k in ['ch2', 'secondary', 'induced', 'channel b', 'output', 'volt']) or str(col) == '2':
                 mapping[col] = 'Ch2_Voltage'
 
         # If we didn't find clear matches, assume columns 0, 1, 2
@@ -112,24 +120,30 @@ class TransformerCoreAnalyzer:
         # Step 5: Convert Flux to Magnetic Flux Density (B)
         B = Magnetics.calculate_B_field_scaling(flux_corrected, self.config)
         
-        # Step 6: Calculate Specific Core Loss
-        loss = Magnetics.calculate_core_loss_density(H, B, time_col, frequency, self.config.Density)
+        # Step 6: Truncate to Integer Cycles
+        # We use H as the reference for zero crossings to ensure we integrate over exactly N cycles.
+        # This prevents errors from partial cycles (e.g. 2.7 cycles).
+        H_cut, B_cut, time_cut = SignalProcessor.cut_to_integer_cycles(H, B, time_col)
         
-        # Step 7: Calculate Differential Permeability
-        mu_r = Magnetics.calculate_differential_permeability(H, B, time_col)
+        # Step 7: Calculate Specific Core Loss (using truncated data)
+        loss = Magnetics.calculate_core_loss_density(H_cut, B_cut, time_cut, frequency, self.config.Density)
         
-        return H, B, loss, mu_r
+        # Step 8: Calculate Differential Permeability (using truncated data)
+        mu_r = Magnetics.calculate_differential_permeability(H_cut, B_cut, time_cut)
+        
+        return H_cut, B_cut, loss, mu_r
 
     def save_results(self, H, B, loss, mu_diff_r, filename, output_dir="output"):
         """
-        Generates plots of the B-H Loop and Permeability, saving them to files.
+        Generates plots of the B-H Loop and permeability metrics, saving them to files.
         """
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             
+        plt.figure(figsize=(15, 5))
+
         # Plot 1: B-H Loop
-        plt.figure(figsize=(10, 6))
-        plt.subplot(1, 2, 1)
+        plt.subplot(1, 3, 1)
         plt.plot(H, B, 'b-')
         plt.title(f"B-H Loop: {filename}\nLoss: {loss:.4f} W/kg")
         plt.xlabel("H (A/m)")
@@ -137,10 +151,9 @@ class TransformerCoreAnalyzer:
         plt.grid(True)
         
         # Plot 2: Permeability vs H
-        plt.subplot(1, 2, 2)
-        # Filter NaNs for plotting (matplotlib handles NaNs by breaking the line, which is desired)
+        plt.subplot(1, 3, 2)
         plt.plot(H, mu_diff_r, 'r-')
-        plt.title(f"Rel. Differential Permeability ($\\mu_{{diff,r}}$)")
+        plt.title("Rel. Differential Permeability vs H")
         plt.xlabel("H (A/m)")
         plt.ylabel("$\\mu_{{diff,r}}$")
         plt.grid(True)
@@ -148,7 +161,25 @@ class TransformerCoreAnalyzer:
         # Set reasonable y-limits to avoid auto-scaling on noise spikes
         valid_mu = mu_diff_r[~np.isnan(mu_diff_r)]
         if len(valid_mu) > 0:
-            plt.ylim(0, np.nanpercentile(valid_mu, 98) * 1.2) 
+            upper = max(1.0, np.nanpercentile(valid_mu, 98) * 1.2)
+            plt.ylim(0, upper)
+
+        # Plot 3: Permeability around the hysteresis curve (color-mapped on B-H)
+        plt.subplot(1, 3, 3)
+        scatter = plt.scatter(
+            H,
+            B,
+            c=mu_diff_r,
+            cmap="viridis",
+            s=6,
+            linewidths=0
+        )
+        plt.title("Permeability Around Hysteresis Loop")
+        plt.xlabel("H (A/m)")
+        plt.ylabel("B (T)")
+        plt.grid(True)
+        cbar = plt.colorbar(scatter)
+        cbar.set_label("$\\mu_{{diff,r}}$")
         
         plt.tight_layout()
         plot_path = os.path.join(output_dir, f"{filename}_analysis.png")
