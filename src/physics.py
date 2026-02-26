@@ -47,12 +47,23 @@ class Magnetics:
         This method is superior to H*dB/dt because integration naturally filters 
         high-frequency measurement noise.
         """
+        H = np.asarray(H_field, dtype=float)
+        B = np.asarray(B_field, dtype=float)
+        t = np.asarray(time, dtype=float)
+
+        if not (len(H) == len(B) == len(t)):
+            raise ValueError("H_field, B_field, and time must have the same length")
+        if len(t) < 2:
+            return 0.0
+        if np.any(np.diff(t) <= 0):
+            raise ValueError("time must be strictly increasing")
+
         # 1. Calculate the total energy density over the captured duration (J/m^3)
         # Fix for NumPy 2.x: np.trapz is removed, use scipy.integrate.trapezoid
-        total_energy_vol = integrate.trapezoid(H_field, B_field)
+        total_energy_vol = integrate.trapezoid(H, B)
         
         # 2. Get the actual duration of the captured trace
-        duration = time[-1] - time[0]
+        duration = t[-1] - t[0]
         if duration <= 0:
             return 0.0
         
@@ -79,6 +90,8 @@ class Magnetics:
             raise ValueError("H_field, B_field, and time_array must have the same length")
         if len(t) < 3:
             return np.full_like(H, np.nan, dtype=float)
+        if np.any(np.diff(t) <= 0):
+            raise ValueError("time_array must be strictly increasing")
 
         edge_order = 2 if len(t) >= 3 else 1
         dB_dt = np.gradient(B, t, edge_order=edge_order)
