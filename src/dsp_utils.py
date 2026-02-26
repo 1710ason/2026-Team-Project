@@ -84,7 +84,7 @@ class SignalProcessor:
 
         # Guard against edge cases where adjustments push window out of valid range.
         if actual_window > n:
-            actual_window = n if n % 2 == 1 else n - 1
+            return data
         if actual_window <= polyorder:
             return data
         
